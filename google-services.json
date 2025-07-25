@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "8938166266",
+    "project_id": "coregym2-516d2",
+    "storage_bucket": "coregym2-516d2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:8938166266:android:02e785ff8b3db47e8a7643",
+        "android_client_info": {
+          "package_name": "com.example.coregym2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiGy059DdlF6egdxk3Nz972PkcXu96IHc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
