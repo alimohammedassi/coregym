@@ -1,6 +1,7 @@
 import 'package:coregym2/FitnessHomePages.dart';
-
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'forgetpassword.dart';
 
 // Main App
@@ -103,6 +104,106 @@ class _AuthWrapperState extends State<AuthWrapper>
   }
 }
 
+// Firebase Auth Service
+class AuthService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  // Get current user
+  User? get currentUser => _auth.currentUser;
+
+  // Auth state changes stream
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  // Sign in with email and password
+  Future<UserCredential?> signInWithEmail(String email, String password) async {
+    try {
+      UserCredential result = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return result;
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    }
+  }
+
+  // Register with email and password
+  Future<UserCredential?> registerWithEmail(String email, String password, String name) async {
+    try {
+      UserCredential result = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      // Update display name
+      await result.user?.updateDisplayName(name);
+      await result.user?.reload();
+      
+      return result;
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    }
+  }
+
+  // Sign in with Google
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      return await _auth.signInWithCredential(credential);
+    } catch (e) {
+      throw 'Google sign-in failed. Please try again.';
+    }
+  }
+
+  // Sign out
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    await _auth.signOut();
+  }
+
+  // Reset password
+  Future<void> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    }
+  }
+
+  // Handle Firebase Auth exceptions
+  String _handleAuthException(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return 'No user found with this email address.';
+      case 'wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'email-already-in-use':
+        return 'An account already exists with this email address.';
+      case 'weak-password':
+        return 'Password is too weak. Please choose a stronger password.';
+      case 'invalid-email':
+        return 'Please enter a valid email address.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many failed attempts. Please try again later.';
+      case 'operation-not-allowed':
+        return 'This sign-in method is not enabled.';
+      default:
+        return e.message ?? 'An error occurred. Please try again.';
+    }
+  }
+}
+
 // Login Screen
 class LoginScreen extends StatefulWidget {
   final VoidCallback onToggle;
@@ -118,6 +219,7 @@ class _LoginScreenState extends State<LoginScreen>
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authService = AuthService();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
   late AnimationController _buttonController;
@@ -147,15 +249,61 @@ class _LoginScreenState extends State<LoginScreen>
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      try {
+        UserCredential? result = await _authService.signInWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
 
-      setState(() => _isLoading = false);
+        if (result != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome back, ${result.user?.displayName ?? result.user?.email}!'),
+              backgroundColor: Colors.green[600],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+          
+          // Navigate to HomeScreen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => FitnessHomePage()),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString()),
+              backgroundColor: Colors.red[600],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
+    }
+  }
 
-      if (mounted) {
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+
+    try {
+      UserCredential? result = await _authService.signInWithGoogle();
+      
+      if (result != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Login Successful!'),
+            content: Text('Welcome, ${result.user?.displayName}!'),
             backgroundColor: Colors.green[600],
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -163,11 +311,28 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
         );
-        // Navigate to HomeScreen
+        
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => FitnessHomePage())
+          MaterialPageRoute(builder: (context) => FitnessHomePage()),
         );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -364,7 +529,7 @@ class _LoginScreenState extends State<LoginScreen>
                         child: SocialButton(
                           icon: Icons.g_mobiledata,
                           text: 'Google',
-                          onPressed: () {},
+                          onPressed: _handleGoogleSignIn,
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -372,7 +537,14 @@ class _LoginScreenState extends State<LoginScreen>
                         child: SocialButton(
                           icon: Icons.facebook,
                           text: 'Facebook',
-                          onPressed: () {},
+                          onPressed: () {
+                            // Facebook sign-in implementation would go here
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Facebook sign-in not implemented yet'),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -428,6 +600,7 @@ class _SignupScreenState extends State<SignupScreen>
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _authService = AuthService();
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
@@ -461,22 +634,48 @@ class _SignupScreenState extends State<SignupScreen>
     if (_formKey.currentState!.validate() && _agreeToTerms) {
       setState(() => _isLoading = true);
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
-
-      setState(() => _isLoading = false);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Account Created Successfully!'),
-            backgroundColor: Colors.green[600],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+      try {
+        UserCredential? result = await _authService.registerWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text,
+          _nameController.text.trim(),
         );
+
+        if (result != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome, ${_nameController.text}! Account created successfully.'),
+              backgroundColor: Colors.green[600],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+          
+          // Navigate to HomeScreen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => FitnessHomePage()),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString()),
+              backgroundColor: Colors.red[600],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
       }
     } else if (!_agreeToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -489,6 +688,63 @@ class _SignupScreenState extends State<SignupScreen>
           ),
         ),
       );
+    }
+  }
+
+  Future<void> _handleGoogleSignUp() async {
+    if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please agree to Terms & Conditions'),
+          backgroundColor: Colors.red[600],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      UserCredential? result = await _authService.signInWithGoogle();
+      
+      if (result != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome, ${result.user?.displayName}!'),
+            backgroundColor: Colors.green[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+        
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => FitnessHomePage()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -607,13 +863,8 @@ class _SignupScreenState extends State<SignupScreen>
                     if (value?.isEmpty ?? true) {
                       return 'Please enter a password';
                     }
-                    if ((value?.length ?? 0) < 8) {
-                      return 'Password must be at least 8 characters';
-                    }
-                    if (!RegExp(
-                      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)',
-                    ).hasMatch(value!)) {
-                      return 'Password must contain uppercase, lowercase, and number';
+                    if ((value?.length ?? 0) < 6) {
+                      return 'Password must be at least 6 characters';
                     }
                     return null;
                   },
@@ -748,7 +999,7 @@ class _SignupScreenState extends State<SignupScreen>
                       child: SocialButton(
                         icon: Icons.g_mobiledata,
                         text: 'Google',
-                        onPressed: () {},
+                        onPressed: _handleGoogleSignUp,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -756,13 +1007,20 @@ class _SignupScreenState extends State<SignupScreen>
                       child: SocialButton(
                         icon: Icons.facebook,
                         text: 'Facebook',
-                        onPressed: () {},
+                        onPressed: () {
+                          // Facebook sign-up implementation would go here
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Facebook sign-up not implemented yet'),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 40),
 
                 // Sign In Link
                 Row(
@@ -786,7 +1044,7 @@ class _SignupScreenState extends State<SignupScreen>
                   ],
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -800,10 +1058,10 @@ class _SignupScreenState extends State<SignupScreen>
 class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
-  final IconData prefixIcon;
+  final IconData? prefixIcon;
   final Widget? suffixIcon;
   final bool obscureText;
-  final TextInputType keyboardType;
+  final TextInputType? keyboardType;
   final TextCapitalization textCapitalization;
   final String? Function(String?)? validator;
 
@@ -811,10 +1069,10 @@ class CustomTextField extends StatelessWidget {
     super.key,
     required this.controller,
     required this.hintText,
-    required this.prefixIcon,
+    this.prefixIcon,
     this.suffixIcon,
     this.obscureText = false,
-    this.keyboardType = TextInputType.text,
+    this.keyboardType,
     this.textCapitalization = TextCapitalization.none,
     this.validator,
   });
@@ -830,8 +1088,10 @@ class CustomTextField extends StatelessWidget {
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-        prefixIcon: Icon(prefixIcon, color: Colors.white.withOpacity(0.7)),
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+        prefixIcon: prefixIcon != null
+            ? Icon(prefixIcon, color: Colors.white.withOpacity(0.7))
+            : null,
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: Colors.white.withOpacity(0.1),
@@ -855,7 +1115,10 @@ class CustomTextField extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Colors.red, width: 2),
         ),
-        errorStyle: const TextStyle(color: Colors.red),
+        errorStyle: const TextStyle(
+          color: Colors.red,
+          fontWeight: FontWeight.w500,
+        ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
@@ -868,7 +1131,7 @@ class CustomTextField extends StatelessWidget {
 // Custom Button Widget
 class CustomButton extends StatelessWidget {
   final String text;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool isLoading;
   final void Function(TapDownDetails)? onTapDown;
   final void Function(TapUpDetails)? onTapUp;
@@ -877,7 +1140,7 @@ class CustomButton extends StatelessWidget {
   const CustomButton({
     super.key,
     required this.text,
-    required this.onPressed,
+    this.onPressed,
     this.isLoading = false,
     this.onTapDown,
     this.onTapUp,
@@ -893,46 +1156,49 @@ class CustomButton extends StatelessWidget {
       child: Container(
         height: 56,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Colors.white, Color(0xFFF1F3F4)],
+          gradient: LinearGradient(
+            colors: [
+              Colors.white.withOpacity(0.9),
+              Colors.white.withOpacity(0.8),
+            ],
           ),
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
+              blurRadius: 8,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: ElevatedButton(
-          onPressed: isLoading ? null : onPressed,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: isLoading ? null : onPressed,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              alignment: Alignment.center,
+              child: isLoading
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF667eea),
+                        ),
+                      ),
+                    )
+                  : Text(
+                      text,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF667eea),
+                      ),
+                    ),
             ),
           ),
-          child: isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFF667eea),
-                    ),
-                  ),
-                )
-              : Text(
-                  text,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF667eea),
-                  ),
-                ),
         ),
       ),
     );
@@ -943,65 +1209,55 @@ class CustomButton extends StatelessWidget {
 class SocialButton extends StatelessWidget {
   final IconData icon;
   final String text;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const SocialButton({
     super.key,
     required this.icon,
     required this.text,
-    required this.onPressed,
+    this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 48,
+      height: 56,
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+        ),
       ),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.white, size: 24),
-            const SizedBox(width: 8),
-            Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
-}
-
-// Add HomeScreen widget at the end of the file if not present
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
-      body: const Center(child: Text('Welcome to the Home Screen!')),
-    );
-  }
-}
-
-void main() {
-  runApp(const MyApp());
 }
