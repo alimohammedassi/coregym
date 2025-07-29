@@ -1,682 +1,375 @@
-
 import 'package:flutter/material.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:image_picker/image_picker.dart';
-// import 'package:firebase_storage/firebase_storage.dart';
-// import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
+import 'Login&SignUp.dart'; // Import the AuthService from your existing file
 
-// /// **AuthService - Firebase Authentication Service**
-// ///
-// /// This service handles all Firebase authentication operations
-// class AuthService {
-//   final FirebaseAuth _auth = FirebaseAuth.instance;
-//   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+/// **UserProfileService - User Profile Data Service**
+///
+/// This service handles user profile data operations with Firestore
+class UserProfileService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
-//   // Get current user
-//   User? get currentUser => _auth.currentUser;
+  // Get user profile data
+  Future<Map<String, dynamic>?> getUserProfile(String uid) async {
+    try {
+      DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return doc.data() as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print('Get profile error: $e');
+      return null;
+    }
+  }
 
-//   // Auth state changes stream
-//   Stream<User?> get authStateChanges => _auth.authStateChanges();
+  // Update user profile
+  Future<bool> updateUserProfile(String uid, Map<String, dynamic> data) async {
+    try {
+      await _firestore.collection('users').doc(uid).update(data);
+      return true;
+    } catch (e) {
+      print('Update profile error: $e');
+      return false;
+    }
+  }
 
-//   // Sign in with email and password
-//   Future<UserCredential?> signInWithEmailAndPassword(String email, String password) async {
-//     try {
-//       UserCredential result = await _auth.signInWithEmailAndPassword(
-//         email: email,
-//         password: password,
-//       );
-//       return result;
-//     } catch (e) {
-//       print('Sign in error: $e');
-//       return null;
-//     }
-//   }
+  // Create user profile document if it doesn't exist
+  Future<bool> createUserProfile(String uid, Map<String, dynamic> data) async {
+    try {
+      await _firestore.collection('users').doc(uid).set(data, SetOptions(merge: true));
+      return true;
+    } catch (e) {
+      print('Create profile error: $e');
+      return false;
+    }
+  }
 
-//   // Register with email and password
-//   Future<UserCredential?> registerWithEmailAndPassword(String email, String password, String name) async {
-//     try {
-//       UserCredential result = await _auth.createUserWithEmailAndPassword(
-//         email: email,
-//         password: password,
-//       );
+  // Upload profile image
+  Future<String?> uploadProfileImage(String uid, File imageFile) async {
+    try {
+      Reference ref = _storage.ref().child('profile_images').child('$uid.jpg');
+      UploadTask uploadTask = ref.putFile(imageFile);
+      TaskSnapshot snapshot = await uploadTask;
+      String downloadUrl = await snapshot.ref.getDownloadURL();
 
-//       // Create user document in Firestore
-//       await _firestore.collection('users').doc(result.user!.uid).set({
-//         'name': name,
-//         'email': email,
-//         'createdAt': FieldValue.serverTimestamp(),
-//         'profileImageUrl': '',
-//         'bio': '',
-//         'age': 0,
-//         'weight': 0.0,
-//         'height': 0.0,
-//         'fitnessGoal': '',
-//       });
+      // Update user document with new image URL
+      await updateUserProfile(uid, {'profileImageUrl': downloadUrl});
 
-//       return result;
-//     } catch (e) {
-//       print('Registration error: $e');
-//       return null;
-//     }
-//   }
+      return downloadUrl;
+    } catch (e) {
+      print('Upload image error: $e');
+      return null;
+    }
+  }
+}
 
-//   // Sign out
-//   Future<void> signOut() async {
-//     try {
-//       await _auth.signOut();
-//     } catch (e) {
-//       print('Sign out error: $e');
-//     }
-//   }
-
-//   // Reset password
-//   Future<bool> resetPassword(String email) async {
-//     try {
-//       await _auth.sendPasswordResetEmail(email: email);
-//       return true;
-//     } catch (e) {
-//       print('Password reset error: $e');
-//       return false;
-//     }
-//   }
-// }
-
-// /// **UserProfileService - User Profile Data Service**
-// ///
-// /// This service handles user profile data operations with Firestore
-// class UserProfileService {
-//   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-//   final FirebaseStorage _storage = FirebaseStorage.instance;
-
-//   // Get user profile data
-//   Future<Map<String, dynamic>?> getUserProfile(String uid) async {
-//     try {
-//       DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
-//       if (doc.exists) {
-//         return doc.data() as Map<String, dynamic>;
-//       }
-//       return null;
-//     } catch (e) {
-//       print('Get profile error: $e');
-//       return null;
-//     }
-//   }
-
-//   // Update user profile
-//   Future<bool> updateUserProfile(String uid, Map<String, dynamic> data) async {
-//     try {
-//       await _firestore.collection('users').doc(uid).update(data);
-//       return true;
-//     } catch (e) {
-//       print('Update profile error: $e');
-//       return false;
-//     }
-//   }
-
-//   // Upload profile image
-//   Future<String?> uploadProfileImage(String uid, File imageFile) async {
-//     try {
-//       Reference ref = _storage.ref().child('profile_images').child('$uid.jpg');
-//       UploadTask uploadTask = ref.putFile(imageFile);
-//       TaskSnapshot snapshot = await uploadTask;
-//       String downloadUrl = await snapshot.ref.getDownloadURL();
-
-//       // Update user document with new image URL
-//       await updateUserProfile(uid, {'profileImageUrl': downloadUrl});
-
-//       return downloadUrl;
-//     } catch (e) {
-//       print('Upload image error: $e');
-//       return null;
-//     }
-//   }
-// }
-
-// /// **AuthWrapper - Authentication State Wrapper**
-// ///
-// /// This widget determines whether to show login or profile page based on auth state
-// class AuthWrapper extends StatelessWidget {
-//   const AuthWrapper({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return StreamBuilder<User?>(
-//       stream: AuthService().authStateChanges,
-//       builder: (context, snapshot) {
-//         if (snapshot.connectionState == ConnectionState.waiting) {
-//           return const Scaffold(
-//             backgroundColor: Color(0xFF0A0A0A),
-//             body: Center(
-//               child: CircularProgressIndicator(
-//                 color: Color(0xFF6C5CE7),
-//               ),
-//             ),
-//           );
-//         }
-
-//         if (snapshot.hasData) {
-//           return ProfilePage(user: snapshot.data!);
-//         } else {
-//           return const LoginPage();
-//         }
-//       },
-//     );
-//   }
-// }
-
-// /// **LoginPage - Login and Registration Page**
-// ///
-// /// This page handles user authentication (login and registration)
-// class LoginPage extends StatefulWidget {
-//   const LoginPage({super.key});
-
-//   @override
-//   State<LoginPage> createState() => _LoginPageState();
-// }
-
-// class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
-//   final AuthService _authService = AuthService();
-//   final _formKey = GlobalKey<FormState>();
-
-//   late TabController _tabController;
-
-//   // Controllers for login
-//   final TextEditingController _loginEmailController = TextEditingController();
-//   final TextEditingController _loginPasswordController = TextEditingController();
-
-//   // Controllers for registration
-//   final TextEditingController _registerNameController = TextEditingController();
-//   final TextEditingController _registerEmailController = TextEditingController();
-//   final TextEditingController _registerPasswordController = TextEditingController();
-//   final TextEditingController _confirmPasswordController = TextEditingController();
-
-//   bool _isLoading = false;
-//   bool _obscurePassword = true;
-//   bool _obscureConfirmPassword = true;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _tabController = TabController(length: 2, vsync: this);
-//   }
-
-//   @override
-//   void dispose() {
-//     _tabController.dispose();
-//     _loginEmailController.dispose();
-//     _loginPasswordController.dispose();
-//     _registerNameController.dispose();
-//     _registerEmailController.dispose();
-//     _registerPasswordController.dispose();
-//     _confirmPasswordController.dispose();
-//     super.dispose();
-//   }
-
-//   Future<void> _signIn() async {
-//     if (_formKey.currentState!.validate()) {
-//       setState(() => _isLoading = true);
-
-//       UserCredential? result = await _authService.signInWithEmailAndPassword(
-//         _loginEmailController.text.trim(),
-//         _loginPasswordController.text.trim(),
-//       );
-
-//       setState(() => _isLoading = false);
-
-//       if (result == null) {
-//         _showErrorSnackBar('Login failed. Please check your credentials.');
-//       }
-//     }
-//   }
-
-//   Future<void> _register() async {
-//     if (_formKey.currentState!.validate()) {
-//       if (_registerPasswordController.text != _confirmPasswordController.text) {
-//         _showErrorSnackBar('Passwords do not match');
-//         return;
-//       }
-
-//       setState(() => _isLoading = true);
-
-//       UserCredential? result = await _authService.registerWithEmailAndPassword(
-//         _registerEmailController.text.trim(),
-//         _registerPasswordController.text.trim(),
-//         _registerNameController.text.trim(),
-//       );
-
-//       setState(() => _isLoading = false);
-
-//       if (result == null) {
-//         _showErrorSnackBar('Registration failed. Please try again.');
-//       }
-//     }
-//   }
-
-//   void _showErrorSnackBar(String message) {
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(
-//         content: Text(message),
-//         backgroundColor: Colors.red,
-//         behavior: SnackBarBehavior.floating,
-//         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-//       ),
-//     );
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: const Color(0xFF0A0A0A),
-//       body: SafeArea(
-//         child: SingleChildScrollView(
-//           padding: const EdgeInsets.all(24),
-//           child: Column(
-//             children: [
-//               const SizedBox(height: 40),
-//               // App Logo/Title
-//               Container(
-//                 width: 100,
-//                 height: 100,
-//                 decoration: BoxDecoration(
-//                   gradient: const LinearGradient(
-//                     colors: [Color(0xFF6C5CE7), Color(0xFFA29BFE)],
-//                   ),
-//                   shape: BoxShape.circle,
-//                   boxShadow: [
-//                     BoxShadow(
-//                       color: const Color(0xFF6C5CE7).withOpacity(0.3),
-//                       blurRadius: 20,
-//                       offset: const Offset(0, 8),
-//                     ),
-//                   ],
-//                 ),
-//                 child: const Icon(
-//                   Icons.fitness_center,
-//                   color: Colors.white,
-//                   size: 50,
-//                 ),
-//               ),
-//               const SizedBox(height: 24),
-//               const Text(
-//                 'Fitness App',
-//                 style: TextStyle(
-//                   color: Colors.white,
-//                   fontSize: 32,
-//                   fontWeight: FontWeight.w800,
-//                   letterSpacing: -0.5,
-//                 ),
-//               ),
-//               const SizedBox(height: 8),
-//               Text(
-//                 'Your fitness journey starts here',
-//                 style: TextStyle(
-//                   color: Colors.grey[400],
-//                   fontSize: 16,
-//                   fontWeight: FontWeight.w500,
-//                 ),
-//               ),
-//               const SizedBox(height: 40),
-
-//               // Tab Bar
-//               Container(
-//                 decoration: BoxDecoration(
-//                   color: const Color(0xFF1A1A1A),
-//                   borderRadius: BorderRadius.circular(16),
-//                   border: Border.all(color: const Color(0xFF424242), width: 1),
-//                 ),
-//                 child: TabBar(
-//                   controller: _tabController,
-//                   indicator: BoxDecoration(
-//                     gradient: const LinearGradient(
-//                       colors: [Color(0xFF6C5CE7), Color(0xFFA29BFE)],
-//                     ),
-//                     borderRadius: BorderRadius.circular(12),
-//                   ),
-//                   labelColor: Colors.white,
-//                   unselectedLabelColor: Colors.grey[400],
-//                   labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-//                   tabs: const [
-//                     Tab(text: 'Login'),
-//                     Tab(text: 'Register'),
-//                   ],
-//                 ),
-//               ),
-//               const SizedBox(height: 32),
-
-//               // Tab Bar View
-//               SizedBox(
-//                 height: 400,
-//                 child: TabBarView(
-//                   controller: _tabController,
-//                   children: [
-//                     _buildLoginForm(),
-//                     _buildRegisterForm(),
-//                   ],
-//                 ),
-//               ),
-//             ],
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-
-//   Widget _buildLoginForm() {
-//     return Form(
-//       key: _formKey,
-//       child: Column(
-//         children: [
-//           _buildTextField(
-//             controller: _loginEmailController,
-//             label: 'Email',
-//             icon: Icons.email_outlined,
-//             keyboardType: TextInputType.emailAddress,
-//             validator: (value) {
-//               if (value == null || value.isEmpty) {
-//                 return 'Please enter your email';
-//               }
-//               if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-//                 return 'Please enter a valid email';
-//               }
-//               return null;
-//             },
-//           ),
-//           const SizedBox(height: 16),
-//           _buildTextField(
-//             controller: _loginPasswordController,
-//             label: 'Password',
-//             icon: Icons.lock_outlined,
-//             obscureText: _obscurePassword,
-//             suffixIcon: IconButton(
-//               icon: Icon(
-//                 _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-//                 color: Colors.grey[400],
-//               ),
-//               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-//             ),
-//             validator: (value) {
-//               if (value == null || value.isEmpty) {
-//                 return 'Please enter your password';
-//               }
-//               return null;
-//             },
-//           ),
-//           const SizedBox(height: 24),
-//           SizedBox(
-//             width: double.infinity,
-//             child: ElevatedButton(
-//               onPressed: _isLoading ? null : _signIn,
-//               style: ElevatedButton.styleFrom(
-//                 backgroundColor: const Color(0xFF6C5CE7),
-//                 padding: const EdgeInsets.symmetric(vertical: 16),
-//                 shape: RoundedRectangleBorder(
-//                   borderRadius: BorderRadius.circular(12),
-//                 ),
-//                 elevation: 4,
-//               ),
-//               child: _isLoading
-//                   ? const SizedBox(
-//                       width: 20,
-//                       height: 20,
-//                       child: CircularProgressIndicator(
-//                         color: Colors.white,
-//                         strokeWidth: 2,
-//                       ),
-//                     )
-//                   : const Text(
-//                       'Login',
-//                       style: TextStyle(
-//                         color: Colors.white,
-//                         fontSize: 16,
-//                         fontWeight: FontWeight.w600,
-//                       ),
-//                     ),
-//             ),
-//           ),
-//           const SizedBox(height: 16),
-//           TextButton(
-//             onPressed: () => _showForgotPasswordDialog(),
-//             child: Text(
-//               'Forgot Password?',
-//               style: TextStyle(
-//                 color: Colors.grey[400],
-//                 fontSize: 14,
-//               ),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildRegisterForm() {
-//     return Form(
-//       key: _formKey,
-//       child: Column(
-//         children: [
-//           _buildTextField(
-//             controller: _registerNameController,
-//             label: 'Full Name',
-//             icon: Icons.person_outlined,
-//             validator: (value) {
-//               if (value == null || value.isEmpty) {
-//                 return 'Please enter your name';
-//               }
-//               return null;
-//             },
-//           ),
-//           const SizedBox(height: 16),
-//           _buildTextField(
-//             controller: _registerEmailController,
-//             label: 'Email',
-//             icon: Icons.email_outlined,
-//             keyboardType: TextInputType.emailAddress,
-//             validator: (value) {
-//               if (value == null || value.isEmpty) {
-//                 return 'Please enter your email';
-//               }
-//               if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-//                 return 'Please enter a valid email';
-//               }
-//               return null;
-//             },
-//           ),
-//           const SizedBox(height: 16),
-//           _buildTextField(
-//             controller: _registerPasswordController,
-//             label: 'Password',
-//             icon: Icons.lock_outlined,
-//             obscureText: _obscurePassword,
-//             suffixIcon: IconButton(
-//               icon: Icon(
-//                 _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-//                 color: Colors.grey[400],
-//               ),
-//               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-//             ),
-//             validator: (value) {
-//               if (value == null || value.isEmpty) {
-//                 return 'Please enter a password';
-//               }
-//               if (value.length < 6) {
-//                 return 'Password must be at least 6 characters';
-//               }
-//               return null;
-//             },
-//           ),
-//           const SizedBox(height: 16),
-//           _buildTextField(
-//             controller: _confirmPasswordController,
-//             label: 'Confirm Password',
-//             icon: Icons.lock_outlined,
-//             obscureText: _obscureConfirmPassword,
-//             suffixIcon: IconButton(
-//               icon: Icon(
-//                 _obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-//                 color: Colors.grey[400],
-//               ),
-//               onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
-//             ),
-//             validator: (value) {
-//               if (value == null || value.isEmpty) {
-//                 return 'Please confirm your password';
-//               }
-//               return null;
-//             },
-//           ),
-//           const SizedBox(height: 24),
-//           SizedBox(
-//             width: double.infinity,
-//             child: ElevatedButton(
-//               onPressed: _isLoading ? null : _register,
-//               style: ElevatedButton.styleFrom(
-//                 backgroundColor: const Color(0xFF6C5CE7),
-//                 padding: const EdgeInsets.symmetric(vertical: 16),
-//                 shape: RoundedRectangleBorder(
-//                   borderRadius: BorderRadius.circular(12),
-//                 ),
-//                 elevation: 4,
-//               ),
-//               child: _isLoading
-//                   ? const SizedBox(
-//                       width: 20,
-//                       height: 20,
-//                       child: CircularProgressIndicator(
-//                         color: Colors.white,
-//                         strokeWidth: 2,
-//                       ),
-//                     )
-//                   : const Text(
-//                       'Register',
-//                       style: TextStyle(
-//                         color: Colors.white,
-//                         fontSize: 16,
-//                         fontWeight: FontWeight.w600,
-//                       ),
-//                     ),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildTextField({
-//     required TextEditingController controller,
-//     required String label,
-//     required IconData icon,
-//     TextInputType? keyboardType,
-//     bool obscureText = false,
-//     Widget? suffixIcon,
-//     String? Function(String?)? validator,
-//   }) {
-//     return TextFormField(
-//       controller: controller,
-//       style: const TextStyle(color: Colors.white),
-//       keyboardType: keyboardType,
-//       obscureText: obscureText,
-//       decoration: InputDecoration(
-//         labelText: label,
-//         labelStyle: TextStyle(color: Colors.grey[400]),
-//         prefixIcon: Icon(icon, color: Colors.grey[400]),
-//         suffixIcon: suffixIcon,
-//         filled: true,
-//         fillColor: const Color(0xFF1A1A1A),
-//         border: OutlineInputBorder(
-//           borderRadius: BorderRadius.circular(12),
-//           borderSide: BorderSide.none,
-//         ),
-//         focusedBorder: OutlineInputBorder(
-//           borderRadius: BorderRadius.circular(12),
-//           borderSide: const BorderSide(color: Color(0xFF6C5CE7), width: 2),
-//         ),
-//       ),
-//       validator: validator,
-//     );
-//   }
-
-//   void _showForgotPasswordDialog() {
-//     final TextEditingController emailController = TextEditingController();
-//     showDialog(
-//       context: context,
-//       builder: (context) => AlertDialog(
-//         backgroundColor: const Color(0xFF1A1A1A),
-//         title: const Text(
-//           'Reset Password',
-//           style: TextStyle(color: Colors.white),
-//         ),
-//         content: TextField(
-//           controller: emailController,
-//           style: const TextStyle(color: Colors.white),
-//           decoration: InputDecoration(
-//             hintText: 'Enter your email',
-//             hintStyle: TextStyle(color: Colors.grey[500]),
-//             filled: true,
-//             fillColor: const Color(0xFF2A2A2A),
-//             border: OutlineInputBorder(
-//               borderRadius: BorderRadius.circular(8),
-//               borderSide: BorderSide.none,
-//             ),
-//           ),
-//           keyboardType: TextInputType.emailAddress,
-//         ),
-//         actions: [
-//           TextButton(
-//             onPressed: () => Navigator.pop(context),
-//             child: Text(
-//               'Cancel',
-//               style: TextStyle(color: Colors.grey[400]),
-//             ),
-//           ),
-//           ElevatedButton(
-//             onPressed: () async {
-//               // bool success = await _authService.resetPassword(emailController.text.trim());
-//               // if (success) {
-//               //   Navigator.pop(context);
-//               //   ScaffoldMessenger.of(context).showSnackBar(
-//               //     const SnackBar(
-//               //       content: Text('Password reset link sent to your email!'),
-//               //       backgroundColor: Colors.green,
-//               //     ),
-//               //   );
-//               // } else {
-//               //   Navigator.pop(context);
-//               //   _showErrorSnackBar('Failed to send reset link. Please try again.');
-//               // }
-//                Navigator.pop(context); // Temporarily close dialog
-//                ScaffoldMessenger.of(context).showSnackBar(
-//                   const SnackBar(
-//                     content: Text('Password reset functionality is not enabled in this demo.'),
-//                     backgroundColor: Colors.orange,
-//                   ),
-//                 );
-//             },
-//             style: ElevatedButton.styleFrom(
-//               backgroundColor: const Color(0xFF6C5CE7),
-//             ),
-//             child: const Text(
-//               'Reset',
-//               style: TextStyle(color: Colors.white),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
-class ProfilePage extends StatelessWidget {
+/// **ProfilePage - User Profile Page with Firebase Integration**
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
-  // For demonstration, using static data. In a real app, this would come from a user object.
-  final String userName = "John Doe";
-  final String userEmail = "john.doe@example.com";
-  final String profileImageUrl =
-      "https://images.unsplash.com/photo-1535713875002-d1d0cfd492da?q=80&w=1780&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  final AuthService _authService = AuthService();
+  final UserProfileService _profileService = UserProfileService();
+  final ImagePicker _imagePicker = ImagePicker();
+  
+  Map<String, dynamic>? _userProfile;
+  bool _isLoading = true;
+  bool _isUploadingImage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    final user = _authService.currentUser;
+    if (user != null) {
+      final profile = await _profileService.getUserProfile(user.uid);
+      if (profile == null) {
+        // Create default profile if it doesn't exist
+        final defaultProfile = {
+          'name': user.displayName ?? 'User',
+          'email': user.email ?? '',
+          'profileImageUrl': user.photoURL ?? '',
+          'bio': '',
+          'age': 0,
+          'weight': 0.0,
+          'height': 0.0,
+          'fitnessGoal': '',
+          'createdAt': FieldValue.serverTimestamp(),
+        };
+        await _profileService.createUserProfile(user.uid, defaultProfile);
+        setState(() {
+          _userProfile = defaultProfile;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _userProfile = profile;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 80,
+      );
+
+      if (image != null) {
+        setState(() => _isUploadingImage = true);
+        
+        final File imageFile = File(image.path);
+        final String? downloadUrl = await _profileService.uploadProfileImage(
+          user.uid, 
+          imageFile,
+        );
+
+        if (downloadUrl != null) {
+          setState(() {
+            _userProfile?['profileImageUrl'] = downloadUrl;
+          });
+          _showSuccessSnackBar('Profile image updated successfully!');
+        } else {
+          _showErrorSnackBar('Failed to upload image. Please try again.');
+        }
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error selecting image: $e');
+    } finally {
+      setState(() => _isUploadingImage = false);
+    }
+  }
+
+  Future<void> _signOut() async {
+    try {
+      await _authService.signOut();
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error signing out: $e');
+    }
+  }
+
+  void _showEditProfileDialog() {
+    final nameController = TextEditingController(text: _userProfile?['name'] ?? '');
+    final bioController = TextEditingController(text: _userProfile?['bio'] ?? '');
+    final ageController = TextEditingController(text: (_userProfile?['age'] ?? 0).toString());
+    final weightController = TextEditingController(text: (_userProfile?['weight'] ?? 0.0).toString());
+    final heightController = TextEditingController(text: (_userProfile?['height'] ?? 0.0).toString());
+    final goalController = TextEditingController(text: _userProfile?['fitnessGoal'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Edit Profile',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildEditTextField(nameController, 'Name', Icons.person),
+              const SizedBox(height: 16),
+              _buildEditTextField(bioController, 'Bio', Icons.info, maxLines: 3),
+              const SizedBox(height: 16),
+              _buildEditTextField(ageController, 'Age', Icons.cake, keyboardType: TextInputType.number),
+              const SizedBox(height: 16),
+              _buildEditTextField(weightController, 'Weight (kg)', Icons.scale, keyboardType: TextInputType.number),
+              const SizedBox(height: 16),
+              _buildEditTextField(heightController, 'Height (cm)', Icons.height, keyboardType: TextInputType.number),
+              const SizedBox(height: 16),
+              _buildEditTextField(goalController, 'Fitness Goal', Icons.track_changes),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final user = _authService.currentUser;
+              if (user != null) {
+                final updatedData = {
+                  'name': nameController.text.trim(),
+                  'bio': bioController.text.trim(),
+                  'age': int.tryParse(ageController.text) ?? 0,
+                  'weight': double.tryParse(weightController.text) ?? 0.0,
+                  'height': double.tryParse(heightController.text) ?? 0.0,
+                  'fitnessGoal': goalController.text.trim(),
+                };
+
+                final success = await _profileService.updateUserProfile(user.uid, updatedData);
+                if (success) {
+                  setState(() {
+                    _userProfile = {..._userProfile!, ...updatedData};
+                  });
+                  Navigator.pop(context);
+                  _showSuccessSnackBar('Profile updated successfully!');
+                } else {
+                  _showErrorSnackBar('Failed to update profile. Please try again.');
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6C5CE7),
+            ),
+            child: const Text(
+              'Save',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditTextField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    int maxLines = 1,
+    TextInputType? keyboardType,
+  }) {
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white),
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.grey[400]),
+        prefixIcon: Icon(icon, color: Colors.grey[400]),
+        filled: true,
+        fillColor: const Color(0xFF2A2A2A),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF6C5CE7), width: 2),
+        ),
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green[600],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red[600],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Logout',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Are you sure you want to logout?',
+          style: TextStyle(color: Colors.white),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _signOut();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text(
+              'Logout',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0A0A0A),
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF6C5CE7),
+          ),
+        ),
+      );
+    }
+
+    final user = _authService.currentUser;
+    if (user == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0A0A0A),
+        body: Center(
+          child: Text(
+            'User not found',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
@@ -701,7 +394,7 @@ class ProfilePage extends StatelessWidget {
             _buildProfileImage(),
             const SizedBox(height: 20),
             Text(
-              userName,
+              _userProfile?['name'] ?? user.displayName ?? 'User',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 28,
@@ -710,28 +403,40 @@ class ProfilePage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              userEmail,
+              _userProfile?['email'] ?? user.email ?? '',
               style: TextStyle(
                 color: Colors.grey[400],
                 fontSize: 16,
               ),
             ),
+            if (_userProfile?['bio'] != null && _userProfile!['bio'].isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                _userProfile!['bio'],
+                style: TextStyle(
+                  color: Colors.grey[300],
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
             const SizedBox(height: 30),
             _buildProfileInfoCard(),
             const SizedBox(height: 30),
-            _buildActionButton(context, 'Edit Profile', Icons.edit, () {
-              // Handle edit profile action
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Edit Profile functionality coming soon!'),
-                  backgroundColor: Colors.blueAccent,
-                ),
-              );
-            }),
+            _buildActionButton(
+              context,
+              'Edit Profile',
+              Icons.edit,
+              _showEditProfileDialog,
+            ),
             const SizedBox(height: 16),
-            _buildActionButton(context, 'Logout', Icons.logout, () {
-              _showLogoutDialog(context);
-            }, isDestructive: true),
+            _buildActionButton(
+              context,
+              'Logout',
+              Icons.logout,
+              _showLogoutDialog,
+              isDestructive: true,
+            ),
             const SizedBox(height: 40),
           ],
         ),
@@ -740,26 +445,55 @@ class ProfilePage extends StatelessWidget {
   }
 
   Widget _buildProfileImage() {
+    final profileImageUrl = _userProfile?['profileImageUrl'] ?? '';
+    
     return Stack(
       children: [
         CircleAvatar(
           radius: 70,
           backgroundColor: const Color(0xFF2A2A2A),
-          backgroundImage: NetworkImage(profileImageUrl),
-          onBackgroundImageError: (exception, stacktrace) {
-            debugPrint('Error loading image: $exception');
-          },
+          backgroundImage: profileImageUrl.isNotEmpty 
+            ? NetworkImage(profileImageUrl)
+            : null,
+          child: profileImageUrl.isEmpty
+            ? const Icon(
+                Icons.person,
+                size: 80,
+                color: Colors.grey,
+              )
+            : null,
         ),
+        if (_isUploadingImage)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF6C5CE7),
+                ),
+              ),
+            ),
+          ),
         Positioned(
           bottom: 0,
           right: 0,
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              color: Color(0xFF6C5CE7),
-              shape: BoxShape.circle,
+          child: GestureDetector(
+            onTap: _isUploadingImage ? null : _pickAndUploadImage,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Color(0xFF6C5CE7),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.camera_alt,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
-            child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
           ),
         ),
       ],
@@ -783,13 +517,37 @@ class ProfilePage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _buildInfoRow(Icons.cake_outlined, 'Age', '30'),
+          _buildInfoRow(
+            Icons.cake_outlined,
+            'Age',
+            (_userProfile?['age'] ?? 0) > 0 
+              ? '${_userProfile!['age']} years'
+              : 'Not set',
+          ),
           _buildDivider(),
-          _buildInfoRow(Icons.scale_outlined, 'Weight', '75 kg'),
+          _buildInfoRow(
+            Icons.scale_outlined,
+            'Weight',
+            (_userProfile?['weight'] ?? 0.0) > 0 
+              ? '${_userProfile!['weight']} kg'
+              : 'Not set',
+          ),
           _buildDivider(),
-          _buildInfoRow(Icons.height_outlined, 'Height', '175 cm'),
+          _buildInfoRow(
+            Icons.height_outlined,
+            'Height',
+            (_userProfile?['height'] ?? 0.0) > 0 
+              ? '${_userProfile!['height']} cm'
+              : 'Not set',
+          ),
           _buildDivider(),
-          _buildInfoRow(Icons.track_changes_outlined, 'Fitness Goal', 'Muscle Gain'),
+          _buildInfoRow(
+            Icons.track_changes_outlined,
+            'Fitness Goal',
+            _userProfile?['fitnessGoal']?.isNotEmpty == true
+              ? _userProfile!['fitnessGoal']
+              : 'Not set',
+          ),
         ],
       ),
     );
@@ -811,12 +569,15 @@ class ProfilePage extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.end,
             ),
           ),
         ],
@@ -828,7 +589,13 @@ class ProfilePage extends StatelessWidget {
     return Divider(color: Colors.grey[700], height: 20);
   }
 
-  Widget _buildActionButton(BuildContext context, String text, IconData icon, VoidCallback onPressed, {bool isDestructive = false}) {
+  Widget _buildActionButton(
+    BuildContext context,
+    String text,
+    IconData icon,
+    VoidCallback onPressed, {
+    bool isDestructive = false,
+  }) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
@@ -850,51 +617,6 @@ class ProfilePage extends StatelessWidget {
           ),
           elevation: 4,
         ),
-      ),
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text(
-          'Logout',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Are you sure you want to logout?',
-          style: TextStyle(color: Colors.white),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey[400]),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Implement actual logout logic here (e.g., AuthService().signOut();)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Logged out (demonstration only)!'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text(
-              'Logout',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
@@ -13,7 +11,10 @@ class MuscleTrainingPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text('$muscleGroup Training')),
       body: Center(
-        child: Text('Welcome to $muscleGroup training!', style: const TextStyle(fontSize: 24)),
+        child: Text(
+          'Welcome to $muscleGroup training!',
+          style: const TextStyle(fontSize: 24),
+        ),
       ),
     );
   }
@@ -27,7 +28,9 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: const Center(child: Text('Profile Page', style: TextStyle(fontSize: 24))),
+      body: const Center(
+        child: Text('Profile Page', style: TextStyle(fontSize: 24)),
+      ),
     );
   }
 }
