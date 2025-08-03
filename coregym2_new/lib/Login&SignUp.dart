@@ -108,7 +108,9 @@ class _AuthWrapperState extends State<AuthWrapper>
 // Firebase Auth Service
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+  );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Get current user
@@ -131,13 +133,17 @@ class AuthService {
   }
 
   // Register with email and password
-  Future<UserCredential?> registerWithEmail(String email, String password, String name) async {
+  Future<UserCredential?> registerWithEmail(
+    String email,
+    String password,
+    String name,
+  ) async {
     try {
       UserCredential result = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      
+
       // Update display name
       await result.user?.updateDisplayName(name);
       await result.user?.reload();
@@ -155,7 +161,7 @@ class AuthService {
         'fitnessGoal': '',
         'lastUpdated': FieldValue.serverTimestamp(),
       });
-      
+
       return result;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
@@ -168,16 +174,20 @@ class AuthService {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return null;
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
       UserCredential result = await _auth.signInWithCredential(credential);
-      
+
       // Check if user document exists, if not create one
-      DocumentSnapshot userDoc = await _firestore.collection('users').doc(result.user!.uid).get();
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(result.user!.uid)
+          .get();
       if (!userDoc.exists) {
         await _firestore.collection('users').doc(result.user!.uid).set({
           'name': result.user?.displayName ?? 'Google User',
@@ -195,7 +205,16 @@ class AuthService {
 
       return result;
     } catch (e) {
-      throw 'Google sign-in failed. Please try again.';
+      print('Google Sign-In Error: $e');
+      if (e.toString().contains('network_error')) {
+        throw 'Network error. Please check your internet connection.';
+      } else if (e.toString().contains('sign_in_canceled')) {
+        throw 'Sign-in was canceled.';
+      } else if (e.toString().contains('sign_in_failed')) {
+        throw 'Google sign-in failed. Please try again.';
+      } else {
+        throw 'Google sign-in failed: ${e.toString()}';
+      }
     }
   }
 
@@ -217,7 +236,10 @@ class AuthService {
   // Get user profile data
   Future<Map<String, dynamic>?> getUserProfile(String uid) async {
     try {
-      DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+      DocumentSnapshot doc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .get();
       if (doc.exists) {
         return doc.data() as Map<String, dynamic>;
       }
@@ -323,7 +345,9 @@ class _LoginScreenState extends State<LoginScreen>
         if (result != null && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Welcome back, ${result.user?.displayName ?? result.user?.email}!'),
+              content: Text(
+                'Welcome back, ${result.user?.displayName ?? result.user?.email}!',
+              ),
               backgroundColor: Colors.green[600],
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
@@ -331,12 +355,8 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           );
-          
-          // Navigate to HomeScreen
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => FitnessHomePage()),
-          );
+
+          // No need to navigate manually - AuthStateHandler will handle it
         }
       } catch (e) {
         if (mounted) {
@@ -364,7 +384,7 @@ class _LoginScreenState extends State<LoginScreen>
 
     try {
       UserCredential? result = await _authService.signInWithGoogle();
-      
+
       if (result != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -376,21 +396,38 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
         );
-        
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => FitnessHomePage()),
-        );
+
+        // No need to navigate manually - AuthStateHandler will handle it
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage = 'Google sign-in failed. Please try again.';
+        
+        if (e.toString().contains('network_error')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else if (e.toString().contains('sign_in_canceled')) {
+          errorMessage = 'Sign-in was canceled.';
+        } else if (e.toString().contains('sign_in_failed')) {
+          errorMessage = 'Google sign-in failed. Please configure Firebase properly.';
+        } else if (e.toString().contains('developer_error')) {
+          errorMessage = 'Google Sign-In not configured. Please add SHA-1 to Firebase.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Text(errorMessage),
             backgroundColor: Colors.red[600],
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
+            ),
+            duration: Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Help',
+              textColor: Colors.white,
+              onPressed: () {
+                _showGoogleSignInHelp();
+              },
             ),
           ),
         );
@@ -400,6 +437,30 @@ class _LoginScreenState extends State<LoginScreen>
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _showGoogleSignInHelp() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Google Sign-In Setup'),
+        content: Text(
+          'To fix Google Sign-In:\n\n'
+          '1. Get SHA-1: cd android && .\\gradlew signingReport\n'
+          '2. Go to Firebase Console → Project Settings\n'
+          '3. Add SHA-1 fingerprint to your Android app\n'
+          '4. Enable Google Sign-In in Authentication\n'
+          '5. Download updated google-services.json\n'
+          '6. Replace android/app/google-services.json',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -605,7 +666,9 @@ class _LoginScreenState extends State<LoginScreen>
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Facebook sign-in not implemented yet'),
+                                content: Text(
+                                  'Facebook sign-in not implemented yet',
+                                ),
                               ),
                             );
                           },
@@ -708,7 +771,9 @@ class _SignupScreenState extends State<SignupScreen>
         if (result != null && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Welcome, ${_nameController.text}! Account created successfully.'),
+              content: Text(
+                'Welcome, ${_nameController.text}! Account created successfully.',
+              ),
               backgroundColor: Colors.green[600],
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
@@ -716,12 +781,8 @@ class _SignupScreenState extends State<SignupScreen>
               ),
             ),
           );
-          
-          // Navigate to HomeScreen
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => FitnessHomePage()),
-          );
+
+          // No need to navigate manually - AuthStateHandler will handle it
         }
       } catch (e) {
         if (mounted) {
@@ -774,7 +835,7 @@ class _SignupScreenState extends State<SignupScreen>
 
     try {
       UserCredential? result = await _authService.signInWithGoogle();
-      
+
       if (result != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -786,11 +847,8 @@ class _SignupScreenState extends State<SignupScreen>
             ),
           ),
         );
-        
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => FitnessHomePage()),
-        );
+
+        // No need to navigate manually - AuthStateHandler will handle it
       }
     } catch (e) {
       if (mounted) {
@@ -1074,7 +1132,9 @@ class _SignupScreenState extends State<SignupScreen>
                         onPressed: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Facebook sign-up not implemented yet'),
+                              content: Text(
+                                'Facebook sign-up not implemented yet',
+                              ),
                             ),
                           );
                         },
@@ -1149,13 +1209,8 @@ class CustomTextField extends StatelessWidget {
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: TextStyle(
-          color: Colors.white.withOpacity(0.7),
-        ),
-        prefixIcon: Icon(
-          prefixIcon,
-          color: Colors.white.withOpacity(0.7),
-        ),
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+        prefixIcon: Icon(prefixIcon, color: Colors.white.withOpacity(0.7)),
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: Colors.white.withOpacity(0.1),
@@ -1172,29 +1227,17 @@ class CustomTextField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-            color: Colors.white,
-            width: 2,
-          ),
+          borderSide: const BorderSide(color: Colors.white, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-            color: Colors.red,
-            width: 1,
-          ),
+          borderSide: const BorderSide(color: Colors.red, width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-            color: Colors.red,
-            width: 2,
-          ),
+          borderSide: const BorderSide(color: Colors.red, width: 2),
         ),
-        errorStyle: const TextStyle(
-          color: Colors.red,
-          fontSize: 12,
-        ),
+        errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
@@ -1299,10 +1342,7 @@ class SocialButton extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
       ),
       child: Material(
         color: Colors.transparent,
@@ -1312,11 +1352,7 @@ class SocialButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                color: Colors.white,
-                size: 24,
-              ),
+              Icon(icon, color: Colors.white, size: 24),
               const SizedBox(width: 12),
               Text(
                 text,
